@@ -49,10 +49,9 @@ function setQuizData()
     const repo = 'Project-Q2'; //리포지토리 이름
     const path = 'data.csv'; //파일 경로
     const branch = 'main'; //브랜치 이름
-
     //url 설정
-    const url = `https://raw.githubusercontent.com/${owner}/${repo}/${branch}/${path}`;
-
+    const url = `https://raw.githubusercontent.com/
+                ${owner}/${repo}/${branch}/${path}`;
     //fetch 함수
     fetch(url)
     .then(response => {
