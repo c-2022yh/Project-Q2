@@ -5,15 +5,11 @@ const correctSound = document.getElementById('audio1');
 const wrongSound = document.getElementById('audio2');
 const skipSound = document.getElementById('audio3');
 
-
-
 //html 태그 읽어오는 변수를 미리 설정
 var questionNumber;
 var scoreP;
 var quizDiv;
-var answerDiv;
-var hintDiv;
-var inputText;
+var answerList = [];
 var timeCount;
 var progressBar;
 
@@ -23,35 +19,40 @@ var chatfocus = 0;
 //문제 출제에 사용 될 데이터리스트
 //전체 문제 100문제 리스트
 var dataList = [];
-//실제 출제될 20문제 리스트
-var questionList = new Array(20);
+
+//실제 출제될 10문제 리스트
+var questionList = new Array(10);
+
 //비복원추출을 위한 리스트
 var questionArray = [];
 
 //몇번째 문제를 푸는 지 확인할 변수
 var questionCount = 0;
+
 //정답 맞힌 수
 var score = 0;
-//현재 문제 정답
-var nowAnswer = "";
+
+//정답 보기 인덱스
+var aIndex = 0;
+
 //타이머 조절 변수
 let timer;
 
-//정답을 입력할 수 있는 상태인지 확인할 변수
-let canSubmitAnswer = 1;
-
+//랭킹을 저장할 배열 미리 10개짜리 배열을 생성함
+var rankList = Array.from({ length: 10 }, () => ({ name: "", score: "", time: "" }));
 
 
 //fetch API를 사용해 데이터를 가져옴
 function setQuizData()
 {
-    const owner = 'c-2022yh'; //리포지토리 소유자 이름
+    const owner = 'c-2022yh'; //리포지토리 소유자
     const repo = 'Project-Q2'; //리포지토리 이름
-    const path = 'data.csv'; //파일 경로
+    const path = 'data2.csv'; //파일 경로
     const branch = 'main'; //브랜치 이름
     //url 설정
-    const url = `https://raw.githubusercontent.com/
-                ${owner}/${repo}/${branch}/${path}`;
+    const url = `https://raw.githubusercontent.com/${owner}/${repo}/${branch}/${path}`;
+    //const url = "https://raw.githubusercontent.com/c-2022yh/Project-Q2/main/data.csv";
+
     //fetch 함수
     fetch(url)
     .then(response => {
@@ -116,15 +117,16 @@ function setHtml()
 {
     //html 작성
     frameDiv.innerHTML = `
-        <h2 id="questionNumber">문제1</h2>
-        <p id="scoreP" style="text-align: right; margin-right: 30px; font-size: 20px">정답: 0/20</p>
+        <h2 id="questionNumber">문제</h2>
+        <p id="scoreP" style="text-align: right; margin-right: 30px; font-size: 18px">정답: 0/10</p>
         <div id="quizDiv">&nbsp</div>
-        <div id="answerDiv">&nbsp</div>
-        <div id="hintDiv">&nbsp</div>
-        
-       <div style="margin-top: 10px;"><input autocomplete="off" type="text" id="inputText">
-        </div>
-
+        <ul id="answerList">
+            <li><button id="answer1" class="answerButton">정답1</button></li>
+            <li><button id="answer2" class="answerButton">정답2</button></li>
+            <li><button id="answer3" class="answerButton">정답3</button></li>
+            <li><button id="answer4" class="answerButton">정답4</button></li>
+            <li><button id="answer5" class="answerButton">정답5</button></li>
+        </ul>
         <div id="timeCount">time</div>
         <div id="progressBar"></div>
     `;
@@ -133,23 +135,22 @@ function setHtml()
     questionNumber = document.getElementById('questionNumber');
     scoreP = document.getElementById('scoreP');
     quizDiv = document.getElementById('quizDiv');
-    answerDiv = document.getElementById('answerDiv');
-    hintDiv = document.getElementById('hintDiv');
-    inputText = document.getElementById('inputText');
     timeCount = document.getElementById('timeCount');
     progressBar = document.getElementById('progressBar');
 
-    //이벤트리스너 함수 연결
-    document.addEventListener("keydown", keyDownFunc, false);
-    inputText.addEventListener("focus", chatEnterFunc, false);
-    inputText.addEventListener("blur", chatBlurFunc, false);
+    answerList = new Array();
+    answerList.push(document.getElementById('answer1'));
+    answerList.push(document.getElementById('answer2'));
+    answerList.push(document.getElementById('answer3'));
+    answerList.push(document.getElementById('answer4'));
+    answerList.push(document.getElementById('answer5'));
 
 }
 
 //출제될 문제 설정
 function setQuestionList(_length)
 {
-    //전체 데이터리스트에서 20문제를 선별 
+    //전체 데이터리스트에서 10문제를 선별 
     for(let i=0;i<questionList.length;i++)
     {
         //전체 데이터리스트에서 가져올 인덱스
@@ -168,189 +169,295 @@ function setQuestionList(_length)
 
 function playQuiz()
 {
+    //클릭이벤트 다시 달아주기
+    for(let i in answerList) 
+    {
+        answerList[i].addEventListener("click",clickAnswer,false);
+    }
+
     //html값 표기
     questionNumber.innerHTML =`문제${questionCount+1}`;
     scoreP.innerHTML = `정답: ${score}/${questionList.length}`;
     quizDiv.innerHTML = questionList[questionCount].mean;
-    answerDiv.innerHTML = "";
-    hintDiv.innerHTML = "";
-
-    //현재 문제 값을 가져옴
-    nowAnswer = questionList[questionCount].answer;
-
-    //문제 정답 입력 가능
-    canSubmitAnswer = 1;
-    
 
     //타이머 관련 세팅
-    let t = 20.00;
-    let w = 20000;
-    let interval = 10;
+    let t = 10.00; //10초
+
+    //progressbar width 관련 처리할 변수
+    let w = 100;
+
+    //인터벌 값 설정
+    let interval = 10; 
+
+    //인터벌 설정, 카운트다운 작동
     timer = setInterval(function() {
-        w -= interval;
         
-        //타이머가 0이 되면 정답을 0으로 전송
-        if(w<=0)
-        {
-            submitAnswer("0");
-        }
-
-        //10초가 지나면 힌트 공개
-        if(w == 10000)
-        {
-            let r = Math.random();
-            if(r < 0.5) hintDiv.innerHTML = `힌트: ${questionList[questionCount].hint1}`;
-            else hintDiv.innerHTML = `힌트: ${questionList[questionCount].hint2}`;
-
-        }
-
-        //남은 시간을 표기
+        
+        //t값을 점점 감소시켜서 시간이 점점 줄어들게 만듦
         t-=0.01;
-        timeCount.innerHTML = t.toFixed(2);
 
-        //시간이 감소할수록 progressbar의 width값을 조금씩 감소시킴
-        let c = w/200;
-        progressBar.style.width = c +"%";    
+        //html로 남은시간을 소수점 두자리까지 표기
+        t=t.toFixed(2);
+        timeCount.innerHTML = t;
+        
+        //progressbar의 width값을 감소시켜 시각적으로 시간이 줄어들게 표현
+        w -= (interval/100);
+        progressBar.style.width = w+"%"; 
+        
+        //progressbar의 색깔을 점점 변화시킴
+        let r = Math.floor(255 * (10-t)/10);
+        let g = 0;
+        let b = 0;
+        progressBar.style.backgroundColor = `rgb(${r}, ${g}, ${b})`;
+
+        //시간 종료면 0값을 전달
+        if(t==0)
+        { 
+            timeCount.innerHTML = "시간초과!";
+            clickAnswer();
+        }
     }, interval);
 
 
-}
-
-
-//키를 누르면 실행되는 함수
-function keyDownFunc(e)
-{
-    //엔터를 누르면
-    if(e.keyCode=="13")
-    {
-        //만약 inputText에 포커스가 안 가져있다면
-        if(chatfocus==0)
-        {
-            inputText.focus();//포커스를 맞춰줌
-            chatfocus=1;
-        }
-        //만약 inputText에 포커스가 가져있다면
-        else
-        {
-            inputTextManager();//정답 입력함수 실행
-            inputText.blur();//포커스를 떼줌
-            chatfocus=0;
-        }
-            
-    }
-
-    //if(e.code=="F5") e.preventDefault();
+    //정답 인덱스 초기화
+    aIndex = Math.floor(Math.random()*5);
     
-}
+    //정답보기를 저장할 배열
+    let aList = new Array(5).fill("");
 
-//인풋에 포커스되면?
-function chatEnterFunc()
-{
-    chatfocus=1;
-}
-//인풋에 포커스가 떨어지면?
-function chatBlurFunc()
-{
-    chatfocus=0;
-}
+    //정답 인덱스에 정답보기를 집어넣음
+    aList[aIndex] = questionList[questionCount].answer;
 
-//인풋텍스트 관련 함수
-function inputTextManager()
-{
-    //실제 입력한 값을 가져옴
-    let inputAnswer = document.getElementById('inputText').value;
-    //입력 칸을 비워줌
-    inputText.value="";
-
-    //값을 입력하지 않았다면 아무것도 실행하지 않음
-    if(inputAnswer=="") return false;
-
-    //값이 입력되어있고 정답을 입력할 수 있는 상태면 정답제출함수를 실행
-    if(canSubmitAnswer == 1) submitAnswer(inputAnswer);
-
-}
-
-//제출한 답이 정답인지 확인하는 함수
-function submitAnswer(_text)
-{
-    //0이면 시간초과
-    if(_text == "0")
+    //나머지 오답보기도 전체 문제리스트에서 집어넣음
+    for(let i in aList)
     {
-        console.log("시간 종료");
-        rePlayQuiz();
+        //aIndex로 미리 집어넣은 인덱스가 아니라면 동작
+        if(aList[i] == "")
+        {
+            //오답보기 추가
+            aList[i] = getWrongAnswer(aList);
+        }
     }
-    //스킵을 입력하면 스킵
-    else if(_text == "스킵")
+    
+    //추출한 보기를 각 버튼html에 넣어줌
+    for(let i in answerList)
     {
-        console.log("스킵!");
-        skipSound.play();
-        timeCount.innerHTML = "스킵!";
-        rePlayQuiz();
+        answerList[i].innerHTML=aList[i];
     }
-    //정답을 맞혔다면
-    else if(_text == nowAnswer)
+
+    //문제카운트를 1 증가시킴
+    questionCount++;
+}
+
+//오답보기 비복원추출하는 함수
+function getWrongAnswer(aList)
+{
+    while(true)
+    {
+        let r = Math.floor(Math.random()*dataList.length);
+        let t=0;
+        for(let i in aList)
+        {
+            //값이 같으면 리턴하지 않도록 함
+            if(dataList[r].answer == aList[i]) t++;
+        }
+        if(t==0) return dataList[r].answer;
+    }
+
+}
+
+
+//보기를 클릭하면 실행할 함수
+function clickAnswer(e=0)
+{
+    //정답확인용 변수
+    let num = 5;
+    
+    //시간 초과 오답이 아니라면
+    if(e != 0)
+    {
+        //클릭한 버튼의 id를 가져옴
+        let str = e.target.id; 
+
+        //id의 번호를 정수값으로 가져옴
+        //위에서 추출한 id값이 answer1~5 라서 마지막 값을 가져오고 정수로 변환 
+        num = parseInt(str.charAt(str.length - 1), 10);
+
+        //1~5를 0~4로 바꿔줌
+        num--;
+    }
+
+    //타이머 초기화
+    clearInterval(timer);
+
+    //색깔로 정답 표기
+    answerList[aIndex].style.backgroundColor = '#00ff00';
+
+    //시간 초과 오답일때
+    if(num == 5)
+    {
+        console.log("시간 초과 오답!");
+        timeCount.innerHTML = "시간초과!";
+        //오답 사운드 출력
+        wrongSound.play();
+    }
+    //정답일때
+    else if(num == aIndex)
     {
         console.log("정답!");
-        correctSound.play();
         timeCount.innerHTML = "정답!";
+        //정답 사운드 출력
+        correctSound.play();
         score++;
-        rePlayQuiz();
     }
-    //틀렸다면
+    //오답일때
     else
     {
-        console.log("오답..");
-        wrongSound.currentTime=0;
+        console.log("오답!");
+        timeCount.innerHTML = "오답!";
+        //오답 사운드 출력
         wrongSound.play();
-        
-
+        //틀린 답 색깔 바꾸기
+        answerList[num].style.backgroundColor = '#e74c3c';
     }
-        
-}
 
-//다음 문제 출제
-function rePlayQuiz()
-{
-    //타이머를 초기화
-    clearInterval(timer);
-    //정답 공개
-    answerDiv.innerHTML = nowAnswer;
-    //다음 문제를 출제할 수 있도록 함
-    questionCount++;
-    
-    //이때는 정답 입력이 불가능함
-    canSubmitAnswer=0;
+    //정답처리될때 이벤트 잠시 제거
+    //다음 문제 출제 시 다시 활성화시킴
+    //이전 문제에서 클릭한 트리거가 다음 문제로 넘어가는 현상 방지
+    for(let i in answerList)
+    {
+        answerList[i].removeEventListener("click",clickAnswer);
+    }
 
-    //2초 후에 다음 문제가 실행됨
+
+    //잠시 쉬었다가 다음 문제 출제
     setTimeout(function() {
-
-        //문제를 다 풀었다면 결과화면으로 이동
-        if(questionCount >= 20) resultScreen()
+        
+        for(let i in answerList)
+        {
+            //다시 흰색으로 초기화
+            answerList[i].style.backgroundColor = '#ffffff';
+        }
+        //문제를 다 풀었으면 결과화면으로 이동, 아니면 다음문제 출제
+        if(questionCount>=10) resultScreen();
         else playQuiz();
-    }, 2000);
-    
+    }, 800);
+
 }
+
 
 //결과 화면
 function resultScreen()
 {
-    //점수 계산
-    let p = score*5;
-
     //html 수정
     frameDiv.innerHTML=`
-       <h1>문제 끝!</h1>
-        <h2>점수 ${p}/100 점</h2>
+       <h1 class="h1">문제 끝!</h1>
+        <h2>점수 ${score*10}/100 점</h2>
         <div id="buttonDiv">
             <button id="b1" onclick="startButtonClick()">다시 풀기</button>
             <br>
-            <button id="b2" onclick="location.reload();">메인 화면으로</button>
+            <button id="b2" onclick="inputRanking(${score*10});">랭킹 등록하기</button>
+            <br>
+            <button id="b3" onclick="rankingScreen();">랭킹 보기</button>
         </div>
-
-    `; //location.reload();는 새로고침
+    `;
 }
 
+function inputRanking(s)
+{
+    //랭킹 확인용 날짜 설정
+    const now = new Date();
+    let year = now.getFullYear();
+    let month = String(now.getMonth() + 1).padStart(2, "0"); 
+    let day = String(now.getDate()).padStart(2, "0");
+    let hours = String(now.getHours()).padStart(2, "0");
+    let minutes = String(now.getMinutes()).padStart(2, "0");
+    let seconds = String(now.getSeconds()).padStart(2, "0");
 
+    //랭킹에 등록할 이름을 입력받음
+    let p;
+    while(true)
+    {
+        p = prompt("랭킹에 등록할 이름을 입력해 주세요");
+        if(p.length!=0 && p.length<11) break;
+        alert("1자 이상 10자 이하로 입력해 주세요");
+    }
+
+    //리스트 삽입
+    rankList.push({name:p, score:s,
+        time:`${year}-${month}-${day} ${hours}:${minutes}:${seconds}`});
+    
+    //랭킹화면 보기
+    rankingScreen();
+
+}
+
+//랭킹 화면
+function rankingScreen()
+{
+    //랭킹리스트 정렬
+    //score 기준으로 정렬, score가 같으면 시간이 빠른 쪽이 위
+    //추가로 ""빈값이 가장 밑으로 가도록 설정
+    rankList.sort((a,b) => {
+
+        if (a.score === "" && b.score !== "") return 1;
+        if (b.score === "" && a.score !== "") return -1;
+      
+        if (a.score > b.score) return -1;
+        if (a.score < b.score) return 1;
+      
+        return a.time - b.time;
+    })
+
+    //html 수정
+    frameDiv.innerHTML=`
+      <h1 id="ranking">랭킹</h1>
+        <div ><table>
+            <thead>
+            <tr style="font-size: 20px;">
+                <th>&nbsp</th><th>이름</th><th>점수</th><th>시간</th>
+            </tr>
+            </thead>
+            <tbody>
+            <tr>
+                <td class="td" style="background-color: gold;">1</td><td>${rankList[0].name}</td><td>${rankList[0].score}</td><td>${rankList[0].time}</td>
+            </tr>
+            <tr>
+                <td class="td" style="background-color: silver;">2</td><td>${rankList[1].name}</td><td>${rankList[1].score}</td><td>${rankList[1].time}</td>
+            </tr>
+            <tr>
+                <td class="td" style="background-color: peru;">3</td><td>${rankList[2].name}</td><td>${rankList[2].score}</td><td>${rankList[2].time}</td>
+            </tr>
+            <tr>
+                <td>4</td><td>${rankList[3].name}</td><td>${rankList[3].score}</td><td>${rankList[3].time}</td>
+            </tr>
+            <tr>
+                <td>5</td><td>${rankList[4].name}</td><td>${rankList[4].score}</td><td>${rankList[4].time}</td>
+            </tr>
+            <tr>
+                <td>6</td><td>${rankList[5].name}</td><td>${rankList[5].score}</td><td>${rankList[5].time}</td>
+            </tr>
+            <tr>
+                <td>7</td><td>${rankList[6].name}</td><td>${rankList[6].score}</td><td>${rankList[6].time}</td>
+            </tr>
+            <tr>
+                <td>8</td><td>${rankList[7].name}</td><td>${rankList[7].score}</td><td>${rankList[7].time}</td>
+            </tr>
+            <tr>
+                <td>9</td><td>${rankList[8].name}</td><td>${rankList[8].score}</td><td>${rankList[8].time}</td>
+            </tr>
+            <tr>
+                <td>10</td><td>${rankList[9].name}</td><td>${rankList[9].score}</td><td>${rankList[9].time}</td>
+            </tr>
+            </tbody>
+        </table></div>
+
+        <div id="buttonDiv">
+            <button id="b1" onclick="startButtonClick()">다시 풀기</button>
+        </div>
+        
+    `;
+}
 
 //데이터 설정
 setQuizData();
@@ -367,3 +474,19 @@ window.addEventListener("beforeunload", function (e) {
 window.addEventListener("unload", function () {
     location.reload();
 });
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
